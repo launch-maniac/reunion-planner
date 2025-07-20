@@ -28,7 +28,7 @@ const INITIAL_DATA = {
         { name: 'Katie', group: 'Group E', isAdmin: true }, { name: 'Josh', group: 'Group E', isAdmin: false }, { name: 'Wallace', group: 'Group E', isAdmin: false },
         { name: 'Kim', group: 'Group F', isAdmin: true }, { name: 'Nelson', group: 'Group F', isAdmin: false },
         { name: 'Evie', group: 'Group G', isAdmin: false }, { name: 'Lyndsey', group: 'Group G', isAdmin: true }, { name: 'Ryan', group: 'Group G', isAdmin: false }, { name: 'Lily', group: 'Group G', isAdmin: false }, { name: 'Luke', group: 'Group G', isAdmin: false }, { name: 'Lawson', group: 'Group G', isAdmin: false }, { name: 'Derek', group: 'Group G', isAdmin: false },
-        { name: 'Ann', group: 'Group H', isAdmin: true }, { name: 'Richard', group: 'Group H', isAdmin: false },
+        { name: 'Ann', group: 'Group H', isAdmin: true }, { name: 'Richard', group: 'Group H', isAdmin: true },
         { name: 'Nicole', group: 'Group I', isAdmin: true }, { name: 'Nick', group: 'Group I', isAdmin: false }, { name: 'Thomas', group: 'Group I', isAdmin: false }, { name: 'Henrik', group: 'Group I', isAdmin: false },
         { name: 'Chris', group: 'Group K', isAdmin: false }, { name: 'Sarah', group: 'Group K', isAdmin: true }, { name: 'Chloe', group: 'Group K', isAdmin: false }, { name: 'Abby', group: 'Group K', isAdmin: false },
         { name: 'Jack', group: 'Group L', isAdmin: false }, { name: 'Tracy', group: 'Group L', isAdmin: true },
@@ -171,14 +171,15 @@ export default function App() {
                 onSnapshot(collection(db, `/artifacts/${appId}/public/data/households`), snap => setAllSubmissions(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
                 onSnapshot(collection(db, `/artifacts/${appId}/public/data/events`), snap => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
                 onSnapshot(collection(db, `/artifacts/${appId}/public/data/attendees`), snap => setAllAttendees(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
-                onSnapshot(collection(db, `/artifacts/${appId}/public/data/groups`), snap => setAllGroups(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
+                onSnapshot(collection(db, `/artifacts/${appId}/public/data/groups`), snap => {
+                    setAllGroups(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                    setIsLoading(false); // Set loading to false after essential data is loaded
+                }),
             ];
-            setIsLoading(false);
             return () => unsubscribers.forEach(unsub => unsub());
         };
 
         const seedDataAndListen = async () => {
-            console.log("Checking if data needs to be seeded...");
             const attendeesRef = collection(db, `/artifacts/${appId}/public/data/attendees`);
             const attendeesSnap = await getDocs(attendeesRef);
             if (attendeesSnap.empty) {
@@ -217,7 +218,6 @@ export default function App() {
         const members = allAttendees.filter(a => a.group === attendee.group);
         setCurrentGroupMembers(members);
 
-        // Pre-fill form with existing data if available
         const submission = allSubmissions.find(s => s.groupId === group.id);
         if (submission) {
             setHealthData(submission.healthData || {});
@@ -227,7 +227,6 @@ export default function App() {
             setDrinkChoices(submission.drinkChoices || []);
             setEquipmentBringing(submission.equipmentBringing || []);
         } else {
-            // Reset form for new submission
             setHealthData({});
             setAttendingEvents([]);
             setAttendingMeals([]);
@@ -317,6 +316,48 @@ export default function App() {
     };
     
     // --- UI Components ---
+    const EditEventsModal = () => {
+        const [newEventName, setNewEventName] = useState('');
+        
+        const handleAddEvent = async () => {
+            if (!newEventName.trim()) return;
+            const newEvent = { name: newEventName.trim(), icon: 'Tent' };
+            try {
+                await addDoc(collection(db, `/artifacts/${appId}/public/data/events`), newEvent);
+                setNewEventName('');
+            } catch (error) { console.error("Error adding event:", error); }
+        };
+
+        const handleDeleteEvent = async (eventId) => {
+            try {
+                await deleteDoc(doc(db, `/artifacts/${appId}/public/data/events`, eventId));
+            } catch (error) { console.error("Error deleting event:", error); }
+        };
+
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-lg shadow-2xl p-6 w-full max-w-md">
+                    <div className="flex justify-between items-center mb-4">
+                        <h2 className="text-2xl font-bold text-gray-800">Manage Events</h2>
+                        <button onClick={() => setIsEditingEvents(false)} className="p-1 rounded-full hover:bg-gray-200"><X className="w-6 h-6 text-gray-600" /></button>
+                    </div>
+                    <div className="space-y-3 mb-6 max-h-60 overflow-y-auto pr-2">
+                        {events.map(event => (
+                            <div key={event.id} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
+                                <span className="text-gray-800 font-medium">{event.name}</span>
+                                <button onClick={() => handleDeleteEvent(event.id)} className="p-2 rounded-full hover:bg-red-100 text-red-500 hover:text-red-700"><Trash2 className="w-5 h-5" /></button>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="flex space-x-2">
+                        <input type="text" value={newEventName} onChange={(e) => setNewEventName(e.target.value)} placeholder="New event name" className="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-500"/>
+                        <button onClick={handleAddEvent} className="px-5 py-3 bg-sky-600 text-white font-semibold rounded-lg hover:bg-sky-700 flex items-center"><PlusCircle className="w-5 h-5 mr-2"/> Add</button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     const StepLogin = () => {
         const [selectedGroup, setSelectedGroup] = useState(null);
 
@@ -343,9 +384,7 @@ export default function App() {
                                 </button>
                             ))}
                         </div>
-                        <button onClick={() => setSelectedGroup(null)} className="mt-6 text-gray-600 hover:text-gray-800 font-medium">
-                            &larr; Back to Groups
-                        </button>
+                        <button onClick={() => setSelectedGroup(null)} className="mt-6 text-gray-600 hover:text-gray-800 font-medium">&larr; Back to Groups</button>
                     </div>
                 )}
             </div>
@@ -360,13 +399,7 @@ export default function App() {
                 {currentGroupMembers.map(member => (
                     <div key={member.id} className="bg-gray-50 p-4 rounded-lg">
                         <label className="block text-lg font-semibold text-gray-800 mb-2">{member.name}</label>
-                        <textarea
-                            value={healthData[member.id]?.allergies || ''}
-                            onChange={(e) => handleHealthDataChange(member.id, 'allergies', e.target.value)}
-                            placeholder="e.g., Peanut allergy, bee sting allergy"
-                            className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-500"
-                            rows="2"
-                        ></textarea>
+                        <textarea value={healthData[member.id]?.allergies || ''} onChange={(e) => handleHealthDataChange(member.id, 'allergies', e.target.value)} placeholder="e.g., Peanut allergy, bee sting allergy" className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-500" rows="2"></textarea>
                     </div>
                 ))}
             </div>
@@ -727,6 +760,7 @@ export default function App() {
 
     return (
         <div className="bg-gray-50 min-h-screen font-sans text-gray-900 p-4 sm:p-8">
+            {isEditingEvents && <EditEventsModal />}
             {view === 'form' ? renderForm() : renderDashboard()}
         </div>
     );
